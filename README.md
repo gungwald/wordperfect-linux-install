@@ -17,3 +17,5 @@ cd /usr/X11R6/lib/X11
 ln -s /usr/share/X11/locale .
 ln -s /usr/share/X11/XKeysymDB .
 ```
+
+sudo rpm -ivh --nodeps ld.so-1.9.5-13.i386.rpm libc-5.3.12-31.i386.rpm
