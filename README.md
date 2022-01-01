@@ -10,8 +10,10 @@ https://archive.org/compress/wordperfect-8-for-linux-1999/formats=TEXT%20PDF,IMA
 Registration Number: LW8XR-195C640862
 
 As root:
+'
 cd /usr/X11R6
 ln -s /usr/lib  lib
 cd /usr/X11R6/lib/X11
 ln -s /usr/share/X11/locale .
 ln -s /usr/share/X11/XKeysymDB .
+'
