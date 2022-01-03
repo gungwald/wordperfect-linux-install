@@ -1,0 +1,46 @@
+execve("linux/ins/wpdecom", ["linux/ins/wpdecom", "-s", "linux/dat/session", "/home/bill/opt/wp/wplib/.wpbuild"...], 0x7ffc014f1cc8 /* 47 vars */) = 0
+[ Process PID=687997 runs in 32 bit mode. ]
+mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0xf7eff000
+mprotect(0xf7f06000, 20086, PROT_READ|PROT_WRITE|PROT_EXEC) = 0
+mprotect(0x8048000, 6049, PROT_READ|PROT_WRITE|PROT_EXEC) = 0
+stat("/etc/ld.so.cache", {st_mode=S_IFREG|0644, st_size=103279, ...}) = 0
+open("/etc/ld.so.cache", O_RDONLY)      = 3
+mmap(NULL, 103279, PROT_READ, MAP_SHARED, 3, 0) = 0xf7ee5000
+close(3)                                = 0
+write(2, "linux/ins/wpdecom: cache '/etc/l"..., 55linux/ins/wpdecom: cache '/etc/ld.so.cache' is corrupt
+) = 55
+munmap(0xf7ee5000, 103279)              = 0
+stat("/usr/sparc-linux-libc5/etc/ld.so.preload", 0xff9d3120) = -1 ENOENT (No such file or directory)
+open("/usr/i486-linux-libc5/lib/libm.so.5", O_RDONLY) = 3
+read(3, "\177ELF\1\1\1\0\0\0\0\0\0\0\0\0\3\0\3\0\1\0\0\0\334\21\0\0004\0\0\0"..., 4096) = 4096
+mmap(NULL, 32768, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0xf7ef7000
+mmap(0xf7ef7000, 24504, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0xf7ef7000
+mmap(0xf7efd000, 8060, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0x5000) = 0xf7efd000
+close(3)                                = 0
+mprotect(0xf7ef7000, 24504, PROT_READ|PROT_WRITE|PROT_EXEC) = 0
+open("/usr/i486-linux-libc5/lib/libc.so.5", O_RDONLY) = 3
+read(3, "\177ELF\1\1\1\0\0\0\0\0\0\0\0\0\3\0\3\0\1\0\0\0Xk\1\0004\0\0\0"..., 4096) = 4096
+mmap(NULL, 823296, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0xf7e2e000
+mmap(0xf7e2e000, 591973, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0xf7e2e000
+mmap(0xf7ebf000, 23672, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0x90000) = 0xf7ebf000
+mmap(0xf7ec5000, 201820, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0xf7ec5000
+close(3)                                = 0
+mprotect(0xf7e2e000, 591973, PROT_READ|PROT_WRITE|PROT_EXEC) = 0
+mprotect(0x8048000, 6049, PROT_READ|PROT_EXEC) = 0
+mprotect(0xf7ef7000, 24504, PROT_READ|PROT_EXEC) = 0
+mprotect(0xf7e2e000, 591973, PROT_READ|PROT_EXEC) = 0
+mprotect(0xf7f06000, 20086, PROT_READ|PROT_EXEC) = 0
+personality(PER_LINUX)                  = 0x400000 (PER_LINUX|READ_IMPLIES_EXEC)
+geteuid()                               = 1000
+getuid()                                = 1000
+getgid()                                = 1000
+getegid()                               = 1000
+stat("linux/dat/session", {st_mode=S_IFREG|0666, st_size=21, ...}) = 0
+chmod("linux/dat/session", 0666)        = 0
+brk(0x804bd8c)                          = 0x8253000
+fstat(1, {st_mode=S_IFREG|0664, st_size=2679, ...}) = 0
+mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0xf7e2d000
+write(1, "Couldn't open the file: linux/da"..., 42Couldn't open the file: linux/dat/session
+) = 42
+exit(1)                                 = ?
++++ exited with 1 +++

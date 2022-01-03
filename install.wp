@@ -1,0 +1,1153 @@
+#!/bin/sh
+# /* @(#) install.wp 1.10 02/10/98 10:02:18 */
+# install.wp - WordPerfect Install Script (MAIN)
+
+cd /run/media/bill/LW8XR-B076-MF077
+
+if [ "x$1" = x-v ]; then Vflag=$1; set -x; shift; fi;	# See if verbose mode
+if [ "x$1" != x-l -a "x$1" != x-p -a "x$1" != x-t \
+	-a "x$1" != x-e -a "x$1" != "x" ]; then
+	echo; echo "  Usage: install.wp [-l -p -t -e ]"; echo; exit; fi;
+if [ "`echo -n`" = "" ]; then N="-n"; else C="\c"; fi;
+Parm0=$0; Parms=$*;
+ABC="ABCDEFGHIJKLMNOPQRSTUVWXYZ"; abc="abcdefghijklmnopqrstuvwxyz";
+SHLIB=shlib10; SHBIN=shbin10; WPBIN=wpbin; WPLIB=wplib;
+SHARED="[Ss][Hh][Aa][Rr][Ee][Dd]"; INS="[Ii][Nn][Ss]";
+
+do_err() { echo; echo "  $*"; echo; do_exit; }
+
+ck_cddir() {                        # cd to the install.wp being run
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	PWD=`pwd`;
+	if   [ "$0" = install.wp ]; then
+		if [ -f $0 ]; then return; else DirWork=`which $0`; fi;
+	elif [ "$0" = "./install.wp" ]; then DirWork=$PWD/$0;   # curr dir
+	elif [ "$0" = "/tmp/install.wp" ]; then DirWork=$PWD/install.wp;
+	elif [ "$0" = "/tmp/remove.wp" ]; then DirWork=$PWD/remove.wp;
+	elif [ `echo $0 | sed 's|/.*$|/|'` = "/" ]; then DirWork=$0;# root path
+	else DirWork=$PWD/$0;                                       # relative path
+	while [ "`echo $DirWork | grep '\.\.'`" != "" ]; do     # simplify it
+		DirWork=`echo $DirWork | sed 's|[^/]*/\.\./||'`; done; fi;
+	cd `echo $DirWork | sed 's|/[^/]*.$||g'`;
+}
+
+do_first() {						# Initialize information
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	if [ "$TMPDIR" = "" ]; then TMPDIR=/tmp; fi;
+
+	FromDir=`pwd`;
+	while [ ! -d $FromDir/$SHARED ]; do		# must be in CD area to start
+		echo; echo $N "  Please enter the CD directory: $C"; read FromDir;
+	done;
+	cd $FromDir;
+
+	echo; echo $N "  Please Wait $C";
+	id | egrep "root" >/dev/null 2>/dev/null;	# being root adds some menues
+	if [ "$?" = 0 ]; then User=root; edrc=edrc; mgic=mgic; fi;
+
+	Version=1;
+	while [ -d $TMPDIR/WpTmP$Version ]; do
+		Version=`expr $Version + 1`;
+	done;
+	LinkDir=$TMPDIR/WpTmP$Version; mkdir $LinkDir;
+
+	Ok="0"; Cancel="51"; Reverse="52";
+	ls -d */$INS | sed 's|/.*$||' | sed "y/$ABC/$abc/" > $LinkDir/.plts;
+
+	UNAME_N=`uname -n`;
+	trap 'do_exit' 1 2 3 14 15
+}
+
+do_plats() {						# Determine what platform to run
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	UNAME_A=`uname -a`;
+	uname -X > /tmp/junk 2>/dev/null;
+	Work=`cat /tmp/junk | grep Release | sed 's/.*v//' | sed 's/\..*$//'`;
+	rm -f /tmp/junk;
+	if [ "$Work" = "" ]; then
+		OSVer=`uname -v | awk '{ print substr($1,1,1) }'`;
+	else
+		OSVer=$Work; fi;
+	SYNam=`uname -r | sed 's/\..*/-/g'`;
+	HWNam=`uname -m | awk '{ print substr($1,1,1) }'`;
+	set $SYNam $OSVer $HWNam;
+
+	PlatInfo=`ls */*[Ll]_[Ii][Nn][Ff][Oo]*`;
+	Platform=`grep " Platform " $PlatInfo | sed 's/ * /:/g' \
+	| grep ":$1" | grep ":$2" | grep ":$3"'$' | cut -d":" -f1`;
+
+	WPTEST=[Ww][Pp][Tt][Ee][Ss][Tt];
+	if [ "$Platform" = "" ]; then
+		# the following order is important
+		for Platwork in *[Ss] *9000 *6000 *86 *[Xx] *[Oo]; do
+			WORK=`$Platwork/$INS/$WPTEST* 2>/dev/null | grep -v Killed`;
+			if [ "$WORK" = "Good" ]; then
+				Platform=`echo $Platwork | sed 's/\/.*$//'`; break;
+			fi;
+		done;
+	fi;
+
+	# if unknown platform, display choices and ask for input
+	while [ "$Platform" = "" -o "`grep '^'$Platform $PlatInfo`" = "" ]; do 
+		echo; echo; echo "  Available Platforms:"; echo;
+		grep '^[a-z]' $PlatInfo | cut -d" " -f1 | sort -u | sed 's/^/  /'; echo;
+		echo $N "  Enter Selection: $C"; read Platform;
+	done;
+
+	PLATFORM=$Platform;
+	if [ -d SHARED ]; then PLATFORM=`echo $Platform | sed "y/$abc/$ABC/"`; fi;
+
+	if [ "$Platform" = linux ]; then
+		UNAME_R=`uname -r`;
+		Maj=`echo $UNAME_R | sed 's/[^\.]*$//' | sed 's/\.$//'`
+		Min=`echo $UNAME_R | sed 's/.*\.//'`
+
+		if [ "$Maj" != 2.0 -o "$Min" -lt 18 ]; then echo;
+			echo $N "  Linux $Maj.$Min not certified.  Continue? (y/n) $C";
+			read Cont;
+			if [ "$Cont" != y ]; then echo; do_exit; else echo $N "  $C"; fi;
+		fi;
+	fi;
+}
+
+mylink() {							# create symbolic links
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	LinkFile=$LinkDir/LinkFile;
+	echo > $LinkFile
+	ls -1F $1 | sed 's/[@\*]//' | sed '/\/$/d
+		h
+		y/'$ABC'/'$abc'/
+		s|\.$||
+		G
+		s|\(.*\)\n\(.*\)|ln -s '$1'/\2 \1|' | sed '/YMTRANS.TBL/d' >> $LinkFile
+	chmod 755 $LinkFile;
+	$LinkFile;						# execute the link file
+	rm -f $LinkFile;
+}
+
+ck_media() {						# Initialize for tape or cd
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	Dirs=`ls -d $SHARED */$INS`;
+	for Dir in $Dirs; do
+		DirLow=$LinkDir/`echo $Dir | sed "y/$ABC/$abc/"`;
+		rm -rf $DirLow; mkdir -p $DirLow; cd $DirLow; mylink $FromDir/$Dir;
+	done
+	cd $LinkDir
+	mv shared/wpdata shared/wpdata.bk;
+	cp shared/wpdata.bk shared/wpdata;
+	chmod u+w shared/wpdata;
+}
+
+mk_plats() {						# Make the platform list
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	echo `date` >> shared/log;
+	WorkList="zzz";
+	for work in `ls -d */ins | sed 's/\/.*$//' | sed 's/ /|/g'`; do
+		WorkList="$WorkList|<$work>";
+		if [ "$Platform" = "$work" ];
+		then Values=$Values"1";
+		else Values=$Values"0";
+		fi
+	done
+									# show menu if multiple platforms
+	if [ 1"$Values" -gt 11 ]; then
+		rm -f shared/m_plat;
+		sed -n '1,/DONE/p' shared/l_plat > shared/m_plat
+		egrep "$WorkList" shared/l_plat | sed 's/<.*$//' >> shared/m_plat
+		plat=plat; RetCode=$Ok; Menu=plat; echo "$Values" > .wptemp; savdata;
+	fi
+}
+
+do_parms() {						# Process command line parameters
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+
+	Plim=100;
+	Menu=eula; eula=eula; agre=agre;
+	lnum=lnum; lses=lses; lnu2=lnu2; flex=flex;
+	FullPart="Full";
+	Work=`echo $0 | sed 's/^.*\///'`;
+	if [ "$Work" = "REMOVE.WP" -o "$Work" = remove.wp ]; then
+		Menu=rm01; last=rm03; Remove=Remove; stat="remove";
+		SMsg="  Removing Files..."; EMsg="  Installation Removed.";
+	else
+		last=last; stat="install";
+		SMsg="  Installing Files..."; EMsg="  Installation Complete.";
+	fi;
+	CMsg="  Installation Cancelled.";
+	set dumb $Parms; shift;
+	while [ "x$1" != "x" ]; do
+		if [ "x$1" = x-l ]; then
+			Lflag=$1; FullPart="Part"; prod=prod; size=size; lngs=lngs;
+		elif [ "x$1" = x-p ]; then
+			Pflag=$1; FullPart="Part"; lngs=lngs; prod=prod; prnt=prnt;
+		elif [ "x$1" = x-t ]; then
+			Tflag=$1; FullPart="Part"; Prod="3 "; term=term;
+		elif [ "x$1" = x-e ]; then
+			Eflag=$1; FullPart="Part";
+			prod=; size=; lngs=; term=; prnt=; extr=extr;
+		elif [ "x$1" = x-a ]; then
+			Aflag=$1; FullPart="Full";
+		fi
+		shift;
+	done
+
+	if [ "$FullPart" = "Full" ]; then
+		Lflag="-l"; Pflag="-p"; Tflag="-t"; Eflag="-e"; Aflag="-a";
+		prod=prod; size=size; lngs=lngs; defl=defl;
+		lnum=lnum; lses=lses; lnu2=lnu2; flex=flex; lsvr=lsvr;
+		term=term; prnt=prnt; asgn=asgn; extr=extr; fi;
+
+	if [ -f shared/xkysymdb ]; then cp shared/xkysymdb shared/XKeysymDB; fi
+
+	if [ -f shared/wpprod ]; then Prod=`cat shared/wpprod`;
+		if   [ "$Prod" = "2 " ]; then term=; prod=;
+		elif [ "$Prod" = "3 " ]; then prod=; size=; fi;
+	fi;
+
+	Temp=`sed -n '/#ifdef.*'$Platform'$/,/#endif.*'$Platform'$/p' \
+		shared/l_extr | sed '/^#/d'`;
+	if [ "$Temp" = "" ]; then extr=; Eflag=; fi;	# no extra options
+
+	if [ -f shared/l_s ]; then lnum=; Lnum="Single";
+		lses=; Lses=1; lnu2=; flex=; lsvr=; Lsvr=`uname -n`; edrc=; fi;
+	if [ -f shared/l_l ]; then lnum=lnum;
+		lses=; Lses=1; lnu2=; flex=; lsvr=; Lsvr=`uname -n`; edrc=; fi;
+}
+
+get_set_def() {						# get printer settings files
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	if [ "$FullPart" = Part ]; then return; fi;
+	rm -f shared/.prlist
+	if [ ! -d .wpset ]; then mkdir .wpset; fi;
+
+	rm -f .wpset/.wpc* .wpset/.wp*.def;
+
+	for DirFile in \
+		shdrive/.wpc.set shlib/.wpc51.set \
+		$SHLIB/.wpc52.set $SHLIB/.wpc7c.set $SHLIB/.wpc8c.set \
+		$SHLIB/.wpc60.set $SHLIB/.wpc7x.set $SHLIB/.wpc8x.set \
+		shdrive/wpport.def shlib/wpport.def \
+		$SHLIB/wpdest.def
+	do
+		if [ -f $WRKDIR/$DirFile ]; then cp $WRKDIR/$DirFile .wpset; fi;
+	done
+
+	if   [ -f .wpset/.wpc.set ];   then CHR_WPCSET=".wpc.set";
+	elif [ -f .wpset/.wpc51.set ]; then CHR_WPCSET=".wpc51.set";
+	elif [ -f .wpset/.wpc52.set ]; then CHR_WPCSET=".wpc52.set";
+	elif [ -f .wpset/.wpc7c.set ]; then CHR_WPCSET=".wpc7c.set";
+	elif [ -f .wpset/.wpc8c.set ]; then CHR_WPCSET=".wpc8c.set"; fi;
+
+	if   [ -f .wpset/.wpc60.set ]; then GUI_WPCSET=".wpc60.set";
+	elif [ -f .wpset/.wpc7x.set ];  then GUI_WPCSET=".wpc7x.set";
+	elif [ -f .wpset/.wpc8x.set ];  then GUI_WPCSET=".wpc8x.set"; fi;
+
+	if   [ -f .wpset/wpport.def ]; then DEST_INFO="wpport.def";
+	elif [ -f .wpset/wpdest.def ]; then DEST_INFO="wpdest.def"; fi;
+
+	if [ -f .wpset/$DEST_INFO ]; then mv .wpset/$DEST_INFO .; fi;
+}
+
+pretest() {							# Get the menu values from wpdata
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	Values=`sed -n '/^'$Menu'=/p' $LinkDir/shared/wpdata \
+		| sed 's/^'$Menu'=//'`;
+	case $Menu in
+		agre)
+			rm -f shared/m_agre;
+			grep '^00 ' shared/l_agre | sed 's/^00 //' > shared/m_agre;
+			grep '^0'"$Eula" shared/l_agre | sed 's/^0[1-9] //' \
+			>> shared/m_agre;
+			echo  > shared/license;
+			cat shared/license.$Eula | while read Info; do
+				echo "${Info}" >> shared/license;
+				echo  >> shared/license;
+				echo  >> shared/license;
+			done;;
+		idir) rm -f shared/m_idir;
+			if [ "$FullPart" = Full ]; then warn_work="warn_inst";
+			else warn_work="warn_miss"; fi;
+			sed -n -e '/#ifdef.*'$Platform'$/,/#endif.*'$Platform'$/p' \
+				-e '/#ifdef ALL/,/#endif ALL/p' shared/l_idir \
+				| sed -e '/^#/d' -e '/^$/d' | sed 's/warn_inst/'$warn_work'/' \
+				> shared/m_idir;;
+		size) rm -f shared/m_size;
+			if [ "$Prod" = "3 " ]; then Values=1; fi;
+			sed -n '/#ifdef ALL/,/#endif ALL/p' shared/l_size \
+				| sed -e '/^#/d' > shared/m_size;
+			sed -n '/#ifdef.*'$Platform'$/,/#endif.*'$Platform'$/p' \
+				shared/l_size | sed -e '/^#/d' -e '/^$/d' \
+				| grep '^'"$Prod" | sed 's/^[123] //' >> shared/m_size;;
+		lsvr) if [ "$Values" = "" ]; then Values="$UNAME_N"; fi;;
+		lngs) rm -f shared/m_lngs; LDirs="zzz";
+			for LDir in `cat $LinkDir/shared/wplngs`; do
+				LDirs="$LDirs| $LDir "; done;
+			grep '^[^ ]' shared/l_lngs > shared/m_lngs;
+			egrep "$LDirs" shared/l_lngs | sed 's/^ .. //' >> shared/m_lngs;;
+		defl) rm -f shared/m_defl;
+			grep '^[^ ]' shared/l_defl > shared/m_defl;
+			egrep "$LDirs" shared/l_defl | sed 's/^ .. //' >> shared/m_defl;;
+		term) rm -f shared/m_term;
+			cat shared/l_term > shared/m_term;
+			echo "InputTrs=shared/trs_c.us" >> shared/m_term;
+			if [ "$Ptrn" ]; then
+				echo "PATTERN_DIR=$Ptrn/$SHLIB" >> shared/m_term; fi;;
+		prnt) rm -f shared/m_prnt;
+			cat shared/l_prnt > shared/m_prnt;
+			if [ "$Ptrn" != "" ]; then WRKDIR=$Ptrn; get_set_def;
+			else WRKDIR=$Idir; get_set_def; fi;
+
+			if [ "$FullPart" = Full ]; then
+				if [ "$Prod" = "1 " -o "$Prod" = "2 " ]; then
+					for cnv in prs5028 prs5128 sf5028 sf5128
+					do	if [ ! -f .wpset/$cnv.$DEFL ]; then
+							cp shared/$cnv.us .wpset/$cnv.$DEFL; fi;
+					done
+				fi
+				if [ "$Prod" = "1 " -o "$Prod" = "3 " ]; then
+					for cnv in prs5028c prs5128c sf5028c sf5128c
+					do	if [ ! -f .wpset/$cnv.$DEFL ]; then
+							cp shared/$cnv.us .wpset/$cnv.$DEFL; fi;
+					done
+				fi
+
+				if [ "$GUI_WPCSET" != "" ]; then 
+					echo "SETTING_GUI=$GUI_WPCSET" >> shared/m_prnt; fi;
+				if [ "$CHR_WPCSET" != "" ]; then
+					echo "SETTING_CHR=$CHR_WPCSET" >> shared/m_prnt; fi;
+			fi;
+			if   [ "$Prod" = "1 " ]; then
+				echo "PRINTERS_BTH=shared/prs_b.us" >> shared/m_prnt;
+			elif [ "$Prod" = "2 " ]; then
+				echo "PRINTERS_GUI=shared/prs_g.us" >> shared/m_prnt;
+			elif [ "$Prod" = "3 " ]; then
+				echo "PRINTERS_CHR=shared/prs_c.us" >> shared/m_prnt; fi;
+			;;
+		asgn) rm -f shared/m_asgn;
+			cat shared/l_asgn > shared/m_asgn;
+			if [ "$GUI_WPCSET" != "" ]; then 
+				echo "SETTING_GUI=$GUI_WPCSET" >> shared/m_asgn; fi;
+			if [ "$CHR_WPCSET" != "" ]; then
+				echo "SETTING_CHR=$CHR_WPCSET" >> shared/m_asgn; fi;
+			if [ "$DEST_INFO" != "" ]; then
+				echo "DEST_FILE=$DEST_INFO" >> shared/m_asgn; fi;
+			touch .wptemp .wplist;
+			;;
+		extr) rm -f shared/m_extr;
+			sed -n -e '/#ifdef.*'$Platform'$/,/#endif.*'$Platform'$/p' \
+				-e '/#ifdef ALL/,/#endif ALL/p' shared/l_extr \
+				| sed -e '/^#/d' -e '/^$/d' > shared/m_extr;;
+		ndir) if [ "$Values" = "" ]; then Values=$Idir/netscape; fi;;
+		last|rm03) Review=; getmenu; Menu=$last;;
+	esac;
+	if [ "$First" = "$Menu" -a "$Menu" != eula ]; then
+		touch shared/m_$Menu.bk;
+		cp shared/m_$Menu shared/m_$Menu.bk;
+		rm -f shared/m_$Menu;
+		mv shared/m_$Menu.bk shared/m_$Menu;
+		echo PREV_BUTTON= >> shared/m_$Menu; fi;
+}
+
+runprog() {							# Start the gui or the char version
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	if [ "$Exec" = "" ]; then Exec="wpinstg";
+		if [ "$DISPLAY" = "" ]; then Exec="wpinstc";
+			if [ "x$Vflag" != x-v ]; then clear; fi;
+			$Platform/ins/$Exec $Menu $Values 2>>shared/log; RetCode=$?;
+			if [ "$RetCode" = 1 ]; then
+				do_err "Error: The character install has failed."; fi;
+			if [ -s .wpterm ]; then
+				TERM=`cat .wpterm`; rm -f .wpterm; export TERM; fi;
+		else
+			if $Platform/ins/wpinstg color grey 1>/dev/null 2>/dev/null; then
+				#bgcolor="-bg grey"; fi;
+				unset bgcolor; fi;
+			$Platform/ins/$Exec $Menu $Values $bgcolor; RetCode=$?;
+			if [ "$RetCode" != 0 -a "$RetCode" != 51 ]; then
+				echo; echo "Warning: The graphical install program has failed.";
+				sleep 2;
+				echo "Trying to run the character-based install program.";
+				sleep 2;
+				Exec="wpinstc";
+				if [ "x$Vflag" != x-v ]; then clear; fi;
+				$Platform/ins/$Exec $Menu $Values 2>>shared/log; RetCode=$?;
+				if [ "$RetCode" = 1 ]; then
+					do_err "Error: The character install has failed."; fi;
+				if [ -s .wpterm ]; then
+					TERM=`cat .wpterm`; rm -f .wpterm; export TERM; fi;
+			fi
+		fi
+	else
+		if [ "x$Vflag" != x-v -a "$Exec" = wpinstc ]; then clear; fi;
+		$Platform/ins/$Exec $Menu "$Values" $bgcolor \
+			2>>shared/log; RetCode=$?;
+	fi;
+	if [ "$RetCode" = "$Cancel" ]; then do_exit; fi;
+	if [ -f shared/m_$Menu.bk ]; then	# Restore PREV_BUTTON= adjustment
+		mv shared/m_$Menu.bk shared/m_$Menu; fi;
+}
+
+savdata() {						# Save new values in the wpdata file
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	if [ "$Menu" = "$agre" -o "$Menu" = "$last" ]; then return; fi;
+
+	echo "$Menu=xxx" >> $LinkDir/shared/wpdata
+	WPTEMP=`cat .wptemp`;
+	sed 's|^'$Menu'=.*$|'$Menu'='"$WPTEMP"'|' $LinkDir/shared/wpdata \
+		| sort -u > $LinkDir/shared/wpdata.new;
+	rm -f $LinkDir/shared/wpdata;
+	mv $LinkDir/shared/wpdata.new $LinkDir/shared/wpdata;
+}
+
+savwork() {							# Save information for later processing
+	if [ "x$Vflag" = x-v ]; then set -x; fi;
+	case $Menu in					# .wptemp is ascii or binary numbers
+		eula) Eula=`cat .wplist`;
+			if [ "$Review" != "" ]; then Review=`echo $Review \
+				| sed 's/agre//' | sed 's/eula/eula agre/'`; fi;;
+		plat) Plat=`cat .wplist`; Plat=`echo $Plat | sed 's/ //'`;
+			Platform=`sed -n $Plat'p' $LinkDir/.plts`;;
+		tape) Tape=`cat .wptemp`;;
+		rm02) Rm02=`cat .wptemp`;;
+		idir) Idir=`cat .wptemp`;
+			if [ -d "$Idir" ]; then	# Remove it since it could change
+				rmdir $Idir 2>/dev/null; fi;
+			if [ -f $Idir/.install_log ]; then
+				mv $Idir/.install_log $Idir/.install_log.bk; fi;
+
+			if [ "`sed -n 2,2'p' shared/wplngs`" = "" ]; then
+				LNGS=`sed "y/$ABC/$abc/" shared/wplngs`;
+				defl=; DEFL=$LNGS; fi;;
+		prod) Prod=`cat .wplist`;
+			prod=; size=; prnt=; asgn=; term=;
+			if   [ "x$Lflag" = x-l ]; then
+				prod=prod; size=size; fi;
+			if [ "x$Pflag" = x-p ]; then prod=prod; prnt=prnt; asgn=asgn; fi;
+			if [ "x$Tflag" = x-t ]; then term=term; fi;
+			if [ "x$Eflag" = x-e ]; then extr=extr; fi;
+
+			rm -f shared/m_prnt;
+			if   [ "$Prod" = "1 " ]; then cp shared/l_prnt shared/m_prnt; 
+			elif [ "$Prod" = "2 " ]; then term=;
+				sed '/prs_c/d' shared/l_prnt > shared/m_prnt;
+			elif [ "$Prod" = "3 " ]; then
+				size=; extr=; ndir=;
+				sed '/prs_b/d' shared/l_prnt > shared/m_prnt; fi;;
+		size) Size=`cat .wplist`;;
+		ptrn) Ptrn=`cat .wptemp`;;
+		lerr) Lerr=`cat .wptemp`;;
+		lnum) Lnum=`cat .wptemp`;
+			lerr=;
+			if [ "$Review" != "" ]; then
+				Review=`echo $Review | sed 's/lerr//'`; fi;
+			if [ "$RetCode" = "$Ok" ]; then
+				$LinkDir/$Platform/ins/veruxkey -r $Lnum;
+				if [ "$?" = 0 ]; then lerr=;
+				else Menu=ptrn; lerr=lerr;
+					if [ "$Review" != "" ]; then Review=`echo $Review \
+						| sed 's/lerr//' | sed 's/lnum/lerr lnum/'`; fi;
+				fi;
+			fi;;
+		lses) Lses=`cat .wptemp`;
+			if [ "$Lses" -le "1" ]; then lnu2=;
+				if [ "$Review" != "" ]; then Review=`echo $Review \
+					| sed -e 's/lnu2//' -e 's/ler2//'`; fi;
+			fi;
+			if [ "$Lses" -gt "1" ]; then lnu2=lnu2;
+				if [ "$Review" != "" ]; then
+					Review=`echo $Review | sed -e 's/lnu2//' -e 's/ler2//' \
+						-e 's/lses/lses lnu2/'`; fi;
+			fi;;
+		ler2) Ler2=`cat .wptemp`;;
+		lnu2) Lnu2=`cat .wptemp`;
+			ler2=;
+			if [ "$Review" != "" ]; then
+				Review=`echo $Review | sed 's/ler2//'`; fi;
+			if [ "$RetCode" = "$Ok" ]; then
+				$LinkDir/$Platform/ins/veruxkey -a $Lnu2;
+				if [ "$?" = 0 ]; then ler2=;
+				else Menu=lses; ler2=ler2;
+					if [ "$Review" != "" ]; then Review=`echo $Review \
+						| sed 's/ler2//' | sed 's/lnu2/ler2 lnu2/'`; fi;
+				fi;
+			fi;;
+		flex) Flex=`cat .wplist`;
+			if [ "$Review" != "" ]; then Review=`echo $Review \
+				| sed 's/lsvr//' | sed 's/edrc//'`; fi;
+			if   [ "$Flex" = "1 " ]; then lsvr=; edrc=;
+			elif [ "$Flex" = "2 " ]; then lsvr=lsvr;
+				if [ "$User" = root ]; then edrc=edrc; fi;
+				if [ "$Review" != "" ]; then Review=`echo $Review \
+					| sed 's/flex/ flex '$lsvr' '$edrc'/'`; fi;
+			fi;;
+		lsvr) Lsvr=`cat .wptemp`;;
+		edrc) Edrc=`cat .wplist`;;
+		mgic) Mgic=`cat .wplist`;;
+		lngs) Lngs=`cat .wplist`;
+			for Lng in $Lngs; do
+				LNG=`sed -n $Lng'p' $LinkDir/shared/wplngs | sed "y/$ABC/$abc/"`;
+				LNGS="$LNGS $LNG";
+			done;
+			TMPWRK=`wc -l .wplist | sed 's/^/ /' | sed 's/ * / /g' \
+				| cut -d" " -f2`;
+			if [ "$TMPWRK" -gt 1 ]; then defl="defl";
+				if [ "$Review" != "" -a "$Aflag" = "-a" ]; then
+					Review=`echo $Review \
+					| sed 's/defl//' | sed 's/lngs/lngs defl/'`; fi;
+			else defl=; DEFL=$LNG; fi;;
+		defl) Defl=`cat .wplist | sed 's/ //g'`;
+			DEFL=`sed -n $Defl'p' $LinkDir/shared/wplngs | sed "y/$ABC/$abc/"`;;
+		term) Trsi=`cat .wptemp`;
+			rm -f shared/.trlist; mv .wplist shared/.trlist;;
+		prnt) Prnt=`cat .wptemp`;
+			if [ -s .wplist -a "$FullPart" = Full ]; then asgn="asgn";
+				if [ "$Review" != "" ]; then Review=`echo $Review \
+					| sed 's/asgn//' | sed 's/prnt/prnt asgn/'`; fi;
+			else asgn=; fi;
+			rm -f shared/.prlist; mv .wplist shared/.prlist;;
+		asgn) Asgn=`cat .wptemp`;;
+		extr) Icon=; Oman=; Net1=; Net2=;
+			echo Junk > .list1; sed 's/ /:/' .wplist >> .list1;
+			grep '^'Multi shared/m_extr | grep -n . | egrep -f .list1 > .list2;
+			Icon=`grep Icon .list2 | sed 's/:.*$//'`;
+			Oman=`grep Manual .list2 | sed 's/:.*$//'`;
+			Net1=`grep Netscape  .list2 | sed 's/:.*$//'`;
+			rm -f .list1 .list2;
+
+			if [ "$Net1" -a "$Net2" ]; then Net2=; fi; ecnt=0;
+			for eopt in $Icon $Oman $Net1 $Net2; do ecnt=`expr $ecnt + 1`; done;
+			Plim=`expr 100 - $ecnt`;
+
+			ndir=;
+			Review=`echo $Review \
+				| sed -e 's/ndir//g'`;
+			if [ "$Net1" -o "$Net2" ]; then ndir=ndir; fi;
+			Review=`echo $Review \
+				| sed 's/extr/ extr '$ndir'/'`;;
+		ndir) Ndir=`cat .wptemp`;
+			for Dir in $Ndir $Idir; do	# Remove them since they could change
+				if [ -d $Dir ]; then rmdir $Dir 2>/dev/null; fi; done;;
+		rm03|last) Review=;
+			if [ -s .wplist ]; then
+				set dumb $MenuList; Work=0;
+				for Num in `cat .wplist`; do
+					shift `expr $Num - $Work`;
+					Review="$Review $1";
+					Work=$Num; done
+				set $Review; First=$1;
+				Work=$last;
+				Review="$Review $Work"; fi;;
+	esac
+	rm -f .wplist .wptemp;	# Remove work files
+}
+
+getmenu() {						# Make the menus list
+	if [ "$Vflag" = -v ]; then set -x; fi;
+
+	Part1="$eula $agre $plat $tape idir $prod $size";
+	Part2="$lerr $lnum $lses $ler2 $lnu2 $flex $lsvr";
+	Part3="$term $prnt $asgn $extr $ndir $last";
+
+	if   [ "$Remove" = "Remove" ]; then MenuList="rm01 rm02 rm03";
+	elif [ "$FullPart" = "Part" ]; then MenuList="$Part1 $lngs $Part3";
+	else MenuList="$Part1 ptrn $Part2 $edrc $mgic $lngs $defl $Part3"; fi;
+
+	if [ "$Review" != "" ]; then MenuList=$Review; fi;
+
+	if [ "$RetCode" = "$Reverse" ]; then
+		Menu=`echo $MenuList | sed 's/ * '$Menu'.*//' \
+		| sed 's/.* //'`; return; fi;
+
+	Work=$last;
+	if [ "$Menu" = "$Work" ]; then
+		TempList=`echo $MenuList | sed 's/ * /|/g'`;
+		rm -f shared/t_$Work;
+		egrep "$TempList" shared/l_$Work | sed 's/[^ ]* //' > shared/t_$Work;
+
+		if [ "$Review" != "" ]; then 
+			Menu=`echo $MenuList | sed 's/ .*//'`; return; fi;
+		return 1; fi;
+
+	Menu=`echo $MenuList | sed 's/ * / /g' \
+		| sed 's/.*'$Menu' //' | sed 's/ .*//'`;
+}
+
+do_menus() {						# Loop through the menu list
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	while true; do
+		pretest;					# Pre Test
+		runprog;					# Start the gui or the char version
+		savdata;					# Update the wpdata file
+		savwork;					# Update macros for later processing
+		getmenu;
+		if [ "$?" = 1 ]; then break; fi;
+	done
+}
+
+decomp() {							# decompress files
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	if [ -s "$1" ]; then
+
+printf "cwd=%s Platform=%s $1=%s $2=%s\n" `pwd` "$Platform" "$1" "$2"
+
+		$Platform/ins/wpdecom -s $1 $2 2>> shared/log; RetCode=$?;
+		if [ "$RetCode" = 2 ]; then cp $1 $2;
+		elif [ "$RetCode" = 1 ]; then do_err "Error: Unable to go on."; fi
+	fi
+}
+
+do_pcnt() {
+	while [ "$last_pcnt" -lt "$pcnt" ]; do
+		last_pcnt=`expr $last_pcnt + 1`;
+		if [ "$Exec" = wpinstg ]; then
+			if [ "$last_pcnt" -le "$Plim" ]; then
+				echo $N "1$C" >> shared/l_pcnt; fi;
+			if [ -f shared/cancel ]; then exit; fi;	# exit while
+		else
+			if [ $CNT = 1 ]; then S1="$S1 "; B1="$B1"; fi;
+			if [ $CNT = 3 ]; then S2="$S2 "; B2="$B2"; fi;
+			if [ $last_pcnt = 10 -o $last_pcnt = 100 ]; then P1="$P1"; fi;
+			if [ "$last_pcnt" = "$pcnt" ]; then
+				TPUT=tput;
+				if [ -f /usr/5bin/tput ]; then TPUT=/usr/5bin/tput; fi;
+				$TPUT rev 2>>/dev/null;
+				echo $N "$S1$pcnt%$S2$B1$P1$B2$C";
+				$TPUT rmso 2>>/dev/null;
+			fi;
+			if [ $CNT = 4 ]; then CNT=1; else CNT=`expr $CNT + 1`; fi;
+		fi;
+	done
+}
+
+do_stat() {							# Start the percent complete status
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	Desc="Percent Complete:"
+	rm -f shared/l_pcnt shared/cancel;
+	touch shared/l_pcnt;
+	if [ "$FullPart" = Part -o "$Remove" = Remove ]; then
+		sed -n '$'p shared/l_xpm2 > shared/l_xpm2.new;
+		rm -f shared/l_xpm2; mv shared/l_xpm2.new shared/l_xpm2; fi;
+	if [ "$Exec" = wpinstg ]; then
+		($Platform/ins/wpinstg $stat $bgcolor 2>>shared/log &); sleep 1; fi;
+	if [ "$Vflag" != -v -a "$Exec" = wpinstc ]; then
+		clear; echo; echo "$SMsg"; fi;
+	if [ "$Exec" = wpinstc ]; then
+		fil_cnt=0; tot_cnt=20; last_pcnt=0;
+		echo; P1=; CNT=1; echo $N "  $Desc  $C"; fi;
+
+	if [ "$Remove" = Remove ]; then
+		for dir in acroread netscape samples junk junk \
+			shbin10 shlib10 xpdf junk junk \
+			wpbin wpexpdocs wpgraphics junk junk \
+			wplearn wplib wpmacros xpdf junk; do
+			echo $N "12345$C" >> shared/l_pcnt;
+			if [ -d $Rm02/$dir ]; then
+				chmod u+w $Rm02/$dir; rm -rf $Rm02/$dir; fi;
+			if [ "$Exec" = wpinstc ]; then
+				fil_cnt=`expr $fil_cnt + 1`;
+				work=`expr $fil_cnt \* 100`;
+				pcnt=`expr $work / $tot_cnt`;
+				do_pcnt;
+			fi;
+			sleep 2;
+		done;
+		echo $N "1234567890$C" >> shared/l_pcnt;
+		sleep 4;
+		do_exit;
+	fi;
+}
+
+mk_list() {							# Build a list of files to install
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	SHIP="shared/ship";
+	WORK="shared/worklist"; rm -f $WORK;
+	sed -n -e '/^#ifdef.*'$Platform'$/,/^#endif.*'$Platform'$/p' \
+		-e '/^#ifdef ALL$/,/^#endif ALL$/p' $SHIP \
+		| sed -e '/^#/d' -e '/^$/d' | sort -u > $WORK
+
+	rm -f shared/t_ship; touch shared/t_ship;
+
+	if [ "$FullPart" = "Full" ]; then egrep " bin | dat " $WORK \
+		>> shared/t_ship; fi;
+
+	if [ "x$Lflag" = "x-l" -a "$LNGS" != "" ]; then	# add selected lang files
+		for LNG in `echo $LNGS $DEFL`; do
+			egrep "\.$LNG$|$LNG\....$" $WORK | sed -e '/cmp /d' -e '/ trm /d' \
+				>> shared/t_ship;
+		done
+	fi;
+
+	if [ "$Pflag" = -p ]; then		# add selected printer files
+		for File in `sed -n 's/\.ALL//gp' shared/.prlist \
+		| sed 's///' | sort -u | sed "y/$ABC/$abc/"`; do
+			egrep "$File\.all$" $WORK | sed 's/\.us\.all$/\.'$DEFL'\.all/' \
+			>> shared/t_ship; done
+		if [ "$Prod" = "1 " -o "$Prod" = "2 " ]; then
+			egrep "wp60dm03\.us\.all$|wp60hp01\.us\.all$|wp60ms01\.us\.all$|wp60ps01\.us\.all$|wp60ps02\.us\.all$" $WORK \
+			| sed 's/\.us\.all$/\.'$DEFL'\.all/' >> shared/t_ship; fi;
+		if [ "$Prod" = "1 " -o "$Prod" = "3 " ]; then
+			egrep "wpdm3\.all$|wphp1\.all$|wpms1\.all$|wpps1\.all$|wpps2\.all$" $WORK >> shared/t_ship; fi;
+	fi;
+
+	if [ "$Tflag" = -t ]; then
+		if [ "$Prod" = "1 " -o "$Prod" = "3 " ]; then
+			if [ -f shared/.trlist ]; then		# add selected terminal drivers
+				cat shared/.trlist | while read trsfile newname; do
+					grep " $trsfile.trs"'$' $SHIP \
+					| sed 's/ '$trsfile'\.trs$/ '$newname'\.trs/' \
+					>> shared/t_ship
+				done;
+			fi;
+			if [ "$FullPart" = "Full" ]; then
+				sed -n -e '/^#ifdef.*'$Platform'$/,/^#endif.*'$Platform'$/p' \
+				$SHIP | sed -e '/^#/d' -e '/^$/d' | grep " trm " \
+				>> shared/t_ship;
+			fi;
+		fi;
+	fi;
+
+	rm -f $WORK;
+	if   [ "$Prod" = "2 " ]; then		# remove character entries
+		sed '/ [c][sml]. /d' shared/t_ship > temp; mv temp shared/t_ship;
+	elif [ "$Prod" = "3 " ]; then		# remove gui entries
+		sed '/ [g][sml]. /d' shared/t_ship > temp; mv temp shared/t_ship; fi;
+
+	if   [ "$Size" = "2 " ]; then		# remove max install entries
+		sed '/ [cgb][l]. /d' shared/t_ship > temp; mv temp shared/t_ship;
+	elif [ "$Size" = "3 " ]; then		# remove med/max install entries
+		sed '/ [cgb][lm]. /d' shared/t_ship > temp; mv temp shared/t_ship; fi;
+	sort -u shared/t_ship | sed '/ shared /d' > temp; mv temp shared/t_ship;
+
+	sort -u shared/t_ship | egrep " bin | dat | lng | prn | trm " \
+		| awk '{ print $3"/"$2 }' | sed 's/^/'$Platform'\//' | sort -u \
+		> shared/t_file;
+}
+
+do_media() {						# See if we are CD or tape
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	Dirs="bin dat prn/ch prn/gu trm";
+	for Lng in `egrep " lng/" shared/t_ship | sed 's/ * / /g' \
+		| cut -d" " -f3 | sed 's|lng/||g' | sort -u`; do
+		Dirs="$Dirs lng/$Lng";
+	done
+	DIRS=$Dirs;
+	if [ ! -f $FromDir/shared/ship ]; then	# names and dirs are not ok
+		DIRS=`echo $Dirs | sed "y/$abc/$ABC/"`; fi;
+
+	PLATLN="[Pp][Ll][Aa][Tt].[Ll][Nn]";
+	mkdir $LinkDir/$Platform/prn $LinkDir/$Platform/lng;
+	for Dir in $DIRS; do
+		Test=`echo $Dir | sed 's/\/.*$//'`;
+		LNPLAT=`cat $FromDir/$PLATFORM/$Test/$PLATLN 2>/dev/null`;
+		if [ "$LNPLAT" = "" ]; then LNPLAT=$PLATFORM;
+		else
+			if [ ! -d $FromDir/$LNPLAT ]; then
+				LNPLAT=`echo $LNPLAT | sed "y/$abc/$ABC/"`; fi;
+			if [ ! -d $FromDir/$LNPLAT ]; then
+				echo "  Error: CD missing $LNPLAT"; continue; fi;
+		fi;
+		if [ -f $FromDir/shared/ship ]; then	# names and dirs are ok
+			ln -s $FromDir/$LNPLAT/$Dir $LinkDir/$Platform/$Dir; continue; fi;
+		echo $N "1$C" > $LinkDir/shared/l_pcnt;
+		DirLow=`echo $Dir | sed "y/$ABC/$abc/"`;
+		mkdir -p $LinkDir/$Platform/$DirLow;
+		cd $LinkDir/$Platform/$DirLow;
+		mylink $FromDir/$LNPLAT/$Dir;
+	done;
+	cd $LinkDir;
+	rm -f $LinkDir/shared/l_pcnt; touch $LinkDir/shared/l_pcnt;
+}
+
+linkcopy() {						# link or copy files to install dir
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	if [ "$Dir1/$Nam1" = "$sDir1/$sNam1" -a -f $Idir/$sDir2/$sNam2 ]; then
+		rm -f $Idir/$Dir2/$Nam2;
+		ln $Idir/$sDir2/$sNam2 $Idir/$Dir2/$Nam2;
+	else
+		rm -f $Idir/$Dir2/$Nam2;
+		decomp $Platform/$Dir1/$Nam1 $Idir/$Dir2/$Nam2;
+		chmod $Perm $Idir/$Dir2/$Nam2;
+	fi
+
+        exit 0
+}
+
+do_inst() {							# Install the files
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	for Dir in $Idir/$WPBIN $Idir/$SHBIN; do
+		if [ -d $Dir ]; then chmod 755 $Dir; fi; done;
+	for Work in $Idir/$SHBIN/wplicense $Idir/$SHBIN/wpexc; do
+		if [ -f $Work ]; then $Work -k >> shared/log 2>>shared/log; fi; done;
+
+	touch $LinkDir/.Execs
+	if [ ! -d "$Idir" ]; then mkdir $Idir 2>/dev/null; chmod 755 $Idir; fi;
+	for Dir in `sed 's/ * / /g' shared/t_ship | cut -d" " -f6 | sort -u`; do
+		if [ ! -d "$Idir/$Dir" ]; then
+			mkdir -p $Idir/$Dir; chmod 755 $Idir/$Dir; fi;
+	done
+
+	fil_cnt=0;
+	tot_cnt=`wc -l shared/t_ship | sed 's/^ * //' | sed 's/ .*$//'`
+
+	sDir1="junk"; sNam1="junk";
+	last_pcnt=0;
+	cat shared/t_ship | while read J1 Nam1 Dir1 Opt Perm Dir2 Nam2; do
+		Type=`echo $Opt | sed 's/^..//'`;
+		if   [ "$Type" = c ]; then linkcopy;
+		elif [ "$Type" = b ]; then
+			if [ -f $Idir/$Dir2/$Nam2 ]; then
+				mv -f $Idir/$Dir2/$Nam2 $Idir/$Dir2/$Nam2.bk; fi;
+			linkcopy;
+		elif [ "$Type" = d ]; then
+			if [ ! -f $Idir/$Dir2/$Nam2 ]; then linkcopy; fi;
+		elif [ "$Type" = a ]; then
+			linkcopy; rm -rf $Idir/$Dir2/temp; mkdir $Idir/$Dir2/temp;
+			( cd $Idir/$Dir2/temp; \
+			$LinkDir/$Platform/ins/wxar ../$Nam2; rm -f ../$Nam2;
+			chmod $Perm * .??* 2>/dev/null;
+			mv * .??* .. 2>>$LinkDir/shared/log;
+			cd ..; rmdir $Idir/$Dir2/temp );
+		elif [ "$Type" = t ]; then
+			linkcopy; ( cd $Idir/$Dir2; tar xf $Nam2; rm -f $Nam2;)
+		elif [ "$Type" = x ]; then
+			linkcopy; echo $Dir2/$Nam2 >> $LinkDir/.Execs;
+		elif [ "$Type" = z ]; then continue;
+		fi
+
+		sDir1=$Dir1; sNam1=$Nam1; sDir2=$Dir2; sNam2=$Nam2;
+		fil_cnt=`expr $fil_cnt + 1`;
+		work=`expr $fil_cnt \* 100`;
+		pcnt=`expr $work / $tot_cnt`;
+		do_pcnt;
+	done
+	if [ "$Exec" = wpinstc ]; then echo; echo; fi;
+	if [ -f shared/cancel ]; then do_exit; fi;		# exit install.wp
+}
+
+do_full() {
+	if [ "$FullPart" = "Part" ]; then return; fi;
+	echo $N "1$C" >> shared/l_pcnt;
+}
+
+do_part() {
+	if [ "$FullPart" = "Full" ]; then return; fi;
+	echo $N "$eout$C" >> shared/l_pcnt; sleep 2;
+}
+
+do_extr() {
+	if [ "$Vflag" = -v ]; then set -x; fi;
+
+	if [ "$ecnt" = 0 -o "$ecnt" = "" ]; then return; fi;
+	einc=`expr 100 / $ecnt / 4`;		# percentage increment value
+	emod=`expr 100 % $einc`;
+	while [ "$emod" -gt 0 ]; do
+		eout="1$eout"; emod=`expr $emod - 1`; done;
+	do_part; eout=;
+	while [ "$einc" -gt 0 ]; do eout="1$eout"; einc=`expr $einc - 1`; done;
+
+	if [ "$Icon" ]; then
+		do_part; (cd $Idir/$WPLIB; tar xf $LinkDir/shared/cde.dt)
+		do_part; (cd $Idir/$WPLIB/dt/appconfig/types/C; \
+			sed 's|<Idir>|'$Idir'|' wp8.dt > wp8.dt.new; \
+			mv wp8.dt.new wp8.dt;)
+		do_part;
+		if [ -x /usr/dt/bin/dtappintegrate ]; then
+			if [ "$User" = root ]; then
+				/usr/dt/bin/dtappintegrate -s $Idir/$WPLIB 2>> shared/log; fi;
+			echo "Note: See $WPBIN/README.icon to complete icon processing.";
+		fi;
+		do_part;
+		do_full; fi;
+
+	if [ "$Oman" ]; then
+		MANUAL="[Mm][Aa][Nn][Uu][Aa][Ll]";
+		MTAR="[Mm].[Tt][Aa][Rr]";
+		ARCMP="[Aa][Rr].[Cc][Mm][Pp]";
+		if [ "$Platform" = sco -o "$Platform" = sol86 ];
+			then Reader=xpdf; else Reader=acroread; fi;
+		do_part; mkdir $Idir/$Reader 2>/dev/null; chmod 755 $Idir/$Reader;
+		(cd $Idir/$WPLIB; tar xf $FromDir/$MANUAL/$MTAR);
+		do_part;
+		(cd $Idir/$Reader; rm -f /tmp/errs;
+			cp $FromDir/$MANUAL/$PLATFORM/$ARCMP ar.Z;
+			uncompress -c ar | tar xf - 2>/tmp/errs; rm -f ar.Z;);
+		grep -v "cannot create" /tmp/errs;
+		do_part; rm -f $Idir/$SHBIN/pdf_read
+		do_part; ln -s $Idir/$Reader/bin/$Reader $Idir/$SHBIN/pdf_read
+		if [ "$Platform" = linux ]; then
+			(cd $Idir/acroread/bin; \
+			sed "s|/wp_inst_dir|$Idir|" acroread > acroread.o; \
+			cp acroread.o acroread; rm -f acroread.o;) fi;
+		do_full; fi;
+
+	if [ "$Net1" -o "$Net2" ]; then
+		NETSCAPE="[Nn][Ee][Tt][Ss][Cc][Aa][Pp][Ee]";
+		NSCMP="[Nn][Ss].[Cc][Mm][Pp]";
+		do_part; mkdir $Ndir 2>/dev/null; chmod 755 $Ndir;
+		do_part;
+		(cd $Ndir; rm -f /tmp/errs;
+			cp $FromDir/$NETSCAPE/$PLATFORM/$NSCMP ns.Z;
+			uncompress -c ns | tar xf - 2>/tmp/errs; rm -f ns.Z;);
+		do_part; rm -f $Idir/$SHBIN/webbrowser;
+		if [ "$Net1" ]; then ln -s $Ndir/netscape $Idir/$SHBIN/webbrowser;
+			else ln -s $Ndir/netscape_dns $Idir/$SHBIN/webbrowser; fi;
+		do_part;
+		do_full; fi;
+}
+
+do_log() { echo $* >> $Idir/.install_log 2>>shared/log; }
+
+do_dflt() {							# Make adjustments for default language
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	for Dir in $WPLIB $SHLIB; do \
+		echo $DEFL > $Idir/$Dir/.def.lang; done;
+	for file in $WPLIB/.wp8styles; do
+		if [ -f $Idir/$file.$DEFL ]; then
+			rm -f $Idir/$file; ln $Idir/$file.$DEFL $Idir/$file;
+		fi;
+	done;
+	for Dir in wpexpdocs wplearn wpmacros; do
+		if [ -d $Idir/$Dir/$DEFL ]; then
+			for File in `ls $Idir/$Dir/$DEFL`; do
+				rm -f $Idir/$Dir/$File;
+				ln $Idir/$Dir/$DEFL/$File $Idir/$Dir/$File;
+			done
+		fi
+	done
+}
+
+dodest() {
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	PTR=$Idir/$SHLIB/.ptrdest.ins; PTRV=shared/.ptrdest$Ver.ins;
+
+	if [ -f $PTRV ]; then cp $PTRV $PTR;
+		$Idir/$SHBIN/$DSTEXC -F -a$Idir/$SHLIB/; cp $PTR $PTRV;
+	else $Idir/$SHBIN/$DSTEXC -F -au; fi;
+
+	if [ -f $PTRV -o -f shared/.ptr3$Ver ]; then
+		if [ -f $PTRV ]; then tail +3c $PTRV > shared/.ptr2$Ver; fi;
+		cat shared/.ptr?"$Ver" 2>/dev/null > $PTR;
+		$Idir/$SHBIN/$PTREXC -PTRCHARINST $Prod; fi;
+}
+
+ck_asgn() {						 # See if selected printers to assign
+	if [ -f $Idir/$WPBIN/instadm ]; then
+		$Idir/$WPBIN/instadm 2>>shared/log; rm -f $Idir/$WPBIN/instadm; fi;
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	if [ "$DEST_INFO" ]; then cp $DEST_INFO $Idir/$SHLIB; fi; 
+	if [ "$Prod" = "1 " -o "$Prod" = "2 " ]; then
+		DSTEXC=xwpdest; PTREXC=xwppmgr; Ver="g"; dodest; fi;
+	if [ "$Prod" = "1 " -o "$Prod" = "3 " ]; then
+		DSTEXC=wpdest; PTREXC=ptrinst; Ver="c"; dodest; fi;
+	rm -f $Idir/$SHBIN/.ptrinst?.ins $Idir/$SHBIN/ptrinst;
+}
+
+ck_magic() {							# See if we update magic files
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	if [ "$Mgic" = "1 " ]; then			# If running as root
+		if [ ! -f /etc/magic ]; then touch /etc/magic; fi;
+		WorkDir=`grep " wpmagic " $SHIP \
+			| sed 's/ * / /g' | cut -d" " -f6 | sort -u`;
+		WPMagic=$Idir/$WorkDir/wpmagic; # WordPerfect magic list
+		Magic=/etc/magic;				# System magic file
+		Search="WordPerfect type";		# Our key word to search for
+		WorkSch=`grep "$Search" $Magic`;
+
+		if [ "$WorkSch" = "" ]; then
+			if [ ! -f $Magic.bk ]; then cp $Magic $Magic.bk; fi;
+			cat $WPMagic >> $Magic;
+		else ed -s $Magic << EOF >>shared/log
+/$Search
+kz
+/$Search
+'z,.d
+. r $WPMagic
+w
+q
+EOF
+		fi
+	fi
+}
+
+ck_boot() {									# Check for boot file update
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	if [ "$Platform" = rs6000 ]; then
+		if [ "`grep rc.wp /etc/inittab`" = "" ]; then
+			echo "rc.wp:2:once:/etc/rc.wp" >> /etc/inittab; fi;
+	fi;
+	if [ "$Platform" = sol86 ]; then
+		if [ "`grep '^'wp: /etc/inittab`" = "" ]; then
+			echo "wp:2:once:/etc/rc.wp" >> /etc/inittab; fi;
+	fi;
+	if [ "$Edrc" != "1 " -o "$Flex" = "1 " ]; then return; fi
+	if [ "$Lsvr" != "$UNAME_N" ]; then return; fi;
+
+	for File in `grep "$Platform Bootfile" shared/l_info | cut -d" " -f3-`; do
+		if [ -f $File ]; then break; fi;	# found
+	done;
+	if [ ! -f $File ]; then return; fi;		# none found
+
+	BootVer="wp8"
+	BootWrk=`grep "wplicense -s" $File 2>>shared/log | grep "#$BootVer"`
+	EditAdd=Edit; if [ "$BootWrk" = "" ]; then EditAdd=Add;	fi;
+	if [ -f $File.bk ]; then cp $File $File.bk; fi;
+
+	echo > SvrTemp1;						# create wplicense lines
+	echo "# Startup license daemon" >> SvrTemp1;
+	echo "if [ -f $Idir/$SHBIN/wplicense ]; then" > SvrTemp2;
+	echo "	$Idir/$SHBIN/wplicense -s   #$BootVer" >> SvrTemp2;
+	echo "fi" > SvrTemp3;
+
+	if [ "$EditAdd" = Add ]; then cat SvrTemp* >> $File;
+	elif [ "$EditAdd" = Edit ]; then ed -s $File << EOF >> shared/log;
+/wplicense -s   #
+.-1,.d
+.-1r ./SvrTemp2
+w
+q
+EOF
+	fi;
+	rm -f SvrTemp*;					# clean up
+}
+wpzm() {
+	touch $Idir/$SHLIB/.wp8.lm; chmod 644 $Idir/$SHLIB/.wp8.lm;
+	sed -e 's/<lnum>/'"$Lnum"'/' -e 's/ 0 / '$Lses' /' $Idir/$SHLIB/wpdm.dat \
+	> $Idir/$SHLIB/license.dat;
+}
+do_excs() {							# Execute programs specified.
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	for File in `cat $LinkDir/.Execs`; do
+		if [ "$File" = $SHBIN/wplicense ]; then
+			if [ ! -f $Idir/$SHBIN/wpcreatlic ]; then continue; fi;
+			if [ "$Flex" = "1 " ]; then wpzm; continue; fi;
+			$Idir/$SHBIN/wpcreatlic -u $Lses "$Lnum" $Lsvr 2>>shared/log;
+			chmod ugo+r $Idir/$SHLIB/license.dat;
+			chmod u+w $Idir/$SHLIB/license.dat;
+			if [ "$User" = root -a "$Lsvr" = "$UNAME_N" ]; then
+				$Idir/$SHBIN/wplicense -k \
+					>> shared/log 1>>shared/log 2>>shared/log;
+				sleep 2;
+				$Idir/$SHBIN/wplicense -s 2>>shared/log;
+			fi;
+		elif [ "$File" = $SHBIN/wpexc ]; then
+			$Idir/$File -k 2>>shared/log; $Idir/$File -s 2>>shared/log;
+		elif [ "$File" = $SHBIN/wpcreatlic ]; then
+			continue;
+		else
+			$Idir/$File 2>>shared/log; fi;
+	done
+	if [ -f $LinkDir/shared/l_l ]; then wpzm; fi
+}
+
+ck_ping() {							# See if tcpip is running
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	if [ "$flex" = "" ]; then return; fi;
+	for Ping in /etc/ping /usr/etc/ping /bin/ping /usr/bin/ping /usr/sbin/ping; do
+		if [ -f $Ping ]; then break; else Ping=; fi;
+	done
+
+	if [ "$Platform" = rs6000 -o "$Platform" = sco \
+		-o "$Platform" = linux -o "$Platform" = netwindr ];
+	then PingParms="-q -c 1 localhost"; else PingParms="localhost 8 1"; fi;
+
+	if [ "$Ping" != "" ]; then
+		PingData=`$Ping $PingParms \
+			| egrep "alive| 0% packet loss" 2>>shared/log`; fi;
+
+	if [ "$PingData" = "" ]; then
+		touch $Idir/$SHLIB/.wp8.lm; fi;
+}
+
+do_reg() {							# Try to register the product
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	Display=`echo $DISPLAY`;
+	NetCheck=`$Ping www.sdcorp.com | grep alive`;
+	if [ "$Display" != "" -a -f $Idir/$WPBIN/xwp -a "$NetCheck" != "" ]; then
+		$Ndir/netscape www.sdcorp.com; fi;
+}
+
+do_readme() {
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	Ename="wp or xwp";
+	if [ "$Prod" = "2 " ]; then Ename=`echo $Ename | sed 's/wp or //'`; fi;
+	if [ "$Prod" = "3 " ]; then Ename=`echo $Ename | sed 's/ or xwp//'`; fi;
+	rm -f shared/m_read;
+	sed -e 's|<Idir>|'$Idir'|' -e 's|<Exec>|'"$Ename"'|' shared/l_read \
+	> shared/m_read;
+
+	if [ -f $Idir/$WPBIN/README.$Eula ]; then
+		mv $Idir/$WPBIN/README.$Eula $Idir/$WPBIN/README.lic; fi;
+	if [ -d "$Idir/$WPBIN" ]; then rm -f $Idir/$WPBIN/README.?; fi;
+
+	rm -f shared/t_read;
+	Help_Reads=`grep HELP_READS= shared/m_read | sed 's/.*=//'`
+	ls -1 $Idir/$WPBIN/README* | grep -n . | sed 's/:/ /' \
+	| while read Count ReadMe; do
+		sed -n 1'p' $ReadMe | sed 's/$//' >> shared/t_read;
+		rm -f shared/h_$Help_Reads$Count;
+		ln -s $ReadMe shared/h_$Help_Reads$Count;
+	done;
+
+	sleep 1; echo "123456789" >> shared/l_pcnt; sleep 2;
+	if [ "$Exec" = wpinstc ]; then Values=1; else Values=; fi;
+	Menu=read; runprog;
+	rm -f shared/l_pcnt;
+}
+
+do_exit() {							# Clean up temp files and exit
+	if [ "$Vflag" = -v ]; then set -x; fi;
+	if [ -f shared/log ]; then
+		echo `date` >> shared/log; echo >> shared/log; fi;
+	if [ -f shared/l_pcnt ]; then
+		sleep 2; echo "123456789" >> shared/l_pcnt; sleep 2; fi;
+	if [ -d $Idir/$WPLIB ]; then
+		touch $Idir/$WPLIB/log 2>/dev/null;
+		cat shared/log >> $Idir/$WPLIB/log 2>/dev/null; fi;
+	for Dir in $Idir/$SHLIB $Idir/$WPLIB; do
+		if [ -d $Dir ]; then chmod 777 $Dir; fi; done
+	if [ -f $Idir/$SHLIB/.wpc.admin ]; then
+		chmod 666 $Idir/$SHLIB/.wpc.admin; fi;
+	if [ "$Vflag" = -v ]; then
+		echo; echo $N "Press any key to clean up. $C"; read done; fi
+	cp shared/wpdata $FromDir/.wpdata 2>/dev/null;
+	if [ -f $FromDir/shared/cleanup ]; then
+		for FD in MANUAL manual NETSCAPE netscape SDK sdk \
+		$Platform $PLATFORM INSTALL.WP \
+		install.wp REMOVE.WP remove.wp shared SHARED; do
+			rm -rf $FromDir/$FD 2>/dev/null;
+		done; fi;
+	cd $TMPDIR; rm -rf $TMPDIR/WpTmP$Version &
+	if [ "$Remove" = Remove -a "$RetCode" != $Cancel ]; then
+		if [ "$Exec" = wpinstc ]; then echo; fi; fi;
+	if [ "$RetCode" = $Cancel ]; then
+		echo; echo "$CMsg"; echo; exit 1;
+	else echo; echo "$EMsg"; echo; exit; fi;
+}
+
+# MAIN entry point
+
+ck_cddir;
+do_first; echo $N ".$C";			# Initialize information
+do_plats;							# Get the platform information
+ck_media; echo $N ".$C";			# Initialize for tape or cd
+mk_plats;							# Make the platform list
+do_parms; echo $N ".$C"; echo;	# Process command line parameters
+
+do_menus;							# Loop through the menu list
+
+do_stat;							# Start the percent complete status
+mk_list;							# Build a list of files to install
+do_media;							# See if we are CD or tape
+do_inst;							# Install the files
+do_extr;							# Add extra features to the install
+if [ "$FullPart" = "Full" ]; then
+	do_dflt;						# Make adjustments for default language
+	do_excs;						# Execute programs specified
+	ck_asgn;						# See if selected printers to assign
+	ck_magic;						# See if we update magic files
+	ck_boot;						# See if boot file update is requested
+	ck_ping;						# See if tcpip is running
+	do_readme;						# Display readme files
+fi
+do_exit DONE;						# Clean up temp files and exit
+
